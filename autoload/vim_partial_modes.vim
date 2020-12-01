@@ -370,22 +370,99 @@ function! vim_partial_modes#action_expand(opts)
 endfunction
 
 call vim_partial_modes#define_condition({
-			\ 'name': 'text-insert',
-			\ 'auto': v:true
+			\ 'name': 'track-native-mode',
+			\ 'auto': v:true,
+			\ 'value': v:true
+			\ }) 
+call vim_partial_modes#define_condition({
+			\ 'name': 'inside-native-mode',
+			\ 'auto': v:true,
+			\ 'value': v:true
 			\ }) 
 call vim_partial_modes#define_condition({
 			\ 'name': 'cursor-movement',
 			\ 'auto': v:true,
 			\ 'value': v:true,
 			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'cursorsnap-letters',
+			\ 'auto': v:true,
+			\ 'value': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'selection',
+			\ 'auto': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'text-input',
+			\ 'auto': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'input-inserts',
+			\ 'auto': v:true,
+			\ 'value': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'raw-input',
+			\ 'auto': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'text-input-custom',
+			\ 'auto': v:true
+			\ }) 
+call vim_partial_modes#define_condition({
+			\ 'name': 'cursor-movement-custom',
+			\ 'auto': v:true,
+			\ 'value': v:true,
+			\ })
+
+call vim_partial_modes#define_condition({
+			\ 'name': 'operator-force=char',
+			\ 'auto': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'operator-force=line',
+			\ 'auto': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'operator-force=block',
+			\ 'auto': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'visual-type=char',
+			\ 'auto': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'visual-type=line',
+			\ 'auto': v:true,
+			\ })
+call vim_partial_modes#define_condition({
+			\ 'name': 'visual-type=block',
+			\ 'auto': v:true,
+			\ })
 
 call vim_partial_modes#define_mode({
 			\ 'name': 'normal',
 			\ 'display_name': '',
-			\ 'on_enter': vim_partial_modes#condition_setter(['cursor-movement', 'no=text-insert'], v:true),
+			\ 'on_enter': vim_partial_modes#condition_setter(['inside-native-mode', 'cursor-movement', 'cursorsnap-letters', 'no=text-input'], v:true),
 			\ })
 call vim_partial_modes#define_mode({
 			\ 'name': 'insert',
-			\ 'display_name': '',
-			\ 'on_enter': vim_partial_modes#condition_setter(['cursor-movement', 'text-insert'], v:true),
+			\ 'on_enter': vim_partial_modes#condition_setter(['inside-native-mode', 'cursor-movement', 'cursorsnap-letters', 'text-input', 'input-inserts'], v:true),
+			\ })
+call vim_partial_modes#define_mode({
+			\ 'name': 'replace',
+			\ 'on_enter': vim_partial_modes#condition_setter(['inside-native-mode', 'cursor-movement', 'cursorsnap-letters', 'text-input', 'no=input-inserts'], v:true),
+			\ })
+call vim_partial_modes#define_mode({
+			\ 'name': 'terminal',
+			\ 'on_enter': vim_partial_modes#condition_setter(['inside-native-mode', 'text-input', 'input-inserts', 'raw-input'], v:true),
+			\ })
+call vim_partial_modes#define_mode({
+			\ 'name': 'visual',
+			\ 'on_enter': vim_partial_modes#condition_setter(['inside-native-mode', 'selection', 'cursor-movement', 'cursorsnap-letters'], v:true),
+			\ })
+call vim_partial_modes#define_mode({
+			\ 'name': 'select',
+			\ 'on_enter': vim_partial_modes#condition_setter(['inside-native-mode', 'selection', 'cursor-movement', 'cursorsnap-letters', 'text-input', 'input-inserts'], v:true),
 			\ })
