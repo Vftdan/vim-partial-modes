@@ -43,19 +43,36 @@ function! s:call_all(funcs, ...)
 	" return s:map_array(a:funcs, {f -> s:apply_funcref(f, a:000)})
 endfunction
 
+function! vim_partial_modes#escape_ltgt(str)
+	" TODO add more from |key-notation|
+	let l:str = a:str
+	for [l:pat, l:code] in [['<', 'lt'], ['\\', 'Bslash'], ['|', 'Bar'], ['\r', 'CR'], [' ', 'Space'], ["\<plug>", 'Plug']]
+		let l:str = substitute(l:str, l:pat, '<' . l:code . '>', 'g')
+	endfor
+	return l:str
+endfunction
+
 function! s:construct_plug_token(words)
 	return "\<Plug>(" . join(s:map_array(a:words, {w -> escape(w, ' )\')}), ' ') . ")"
 endfunction
 
-function! s:map_all_modes(lhs, rhs)
-	let l:arg = ' ' . escape(a:lhs, ' <\|') . ' ' . a:rhs
-	for l:mapf in ['map', 'map!', 'tmap']
-		execute l:mapf . l:arg
+function! s:map_all_modes(lhs, rhs, ...)
+	let l:infix = ''
+	let l:modes = [['', ''], ['', '!'], ['t', '']]
+	let l:arguments = []
+	if a:0
+		let l:infix = get(a:1, 'infix', '')
+		let l:modes = get(a:1, 'modes', l:modes)
+		let l:arguments = get(a:1, 'arguments', l:arguments)
+	endif
+	let l:arg = ' ' . join(s:map_array(l:arguments, { x -> '<' . x . '> ' }), '') . vim_partial_modes#escape_ltgt(a:lhs) . (l:infix == 'un' ? '' : ' ' . vim_partial_modes#escape_ltgt(a:rhs))
+	for [l:pre, l:post] in l:modes
+		execute l:pre . l:infix . 'map' . l:post . l:arg
 	endfor
 endfunction
 
 function! s:qarg(arg)
-	return '"' . escape(a:arg, '"\') . '"'
+	return '"' . tr(escape(a:arg, '"\' . "\r\n"), "\r\n", 'rn') . '"'
 endfunction
 
 function! s:before_condition_index(name)
@@ -186,7 +203,7 @@ function! vim_partial_modes#define_mode(opts)
 				\ })
 	let s:modes[l:name] = l:mode
 	let l:token = s:construct_plug_token(['partial-modes', 'push-mode', l:name])
-	call s:map_all_modes(l:token, '<expr> vim_partial_modes#mode_push({"name": ' . s:qarg(l:name) . '})')
+	call s:map_all_modes(l:token, 'vim_partial_modes#mode_push({"name": ' . s:qarg(l:name) . '})', { 'arguments': ['expr'] })
 	return ''
 endfunction
 
