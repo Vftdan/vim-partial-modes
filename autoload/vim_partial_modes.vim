@@ -6,6 +6,26 @@ let s:conditions = {}
 let s:modes = {}
 let s:mode_stack = []
 let s:root_mode = 'normal'
+let s:actions = {}
+let s:priorities = {
+	\ 'default': -100,
+	\ 'standard': 0,
+	\ 'mode': 50,
+	\ 'synonym': 100,
+	\ }
+
+function! s:priority_get(name)
+	let l:names = split(a:name, '\ze+')
+	let l:res = 0
+	for l:name in l:names
+		let l:res += get(s:priorities, a:name, 0)
+	endfor
+	return l:res
+endfunction
+
+function! s:priority_compare(lhs, rhs)
+	return s:priority_get(a:rhs) - get(a:lhs)
+endfunction
 
 function! s:no_setter(name)
 	function! s:_setter(value) closure
@@ -152,6 +172,14 @@ function! vim_partial_modes#condition_set(name, value)
 	return ''
 endfunction
 
+function! vim_partial_modes#condition_has_all(names)
+	return index(s:map_array(a:names, {n -> vim_partial_modes#condition_get(n)}), v:false) == -1
+endfunction
+
+function! vim_partial_modes#condition_has_any(names)
+	return index(s:map_array(a:names, {n -> !vim_partial_modes#condition_get(n)}), v:false) != -1
+endfunction
+
 function! vim_partial_modes#condition_toggle(name)
 	call vim_partial_modes#condition_set(a:name, vim_partial_modes#condition_get(a:name))
 	return ''
@@ -256,6 +284,88 @@ function! vim_partial_modes#mode_transform(opts)
 	endfor
 	let s:mode_stack[0] = { 'name': l:name, 'replaces': s:mode_stack[0] }
 	call vim_partial_modes#condition_set('mode=' . l:name, v:true)
+	return ''
+endfunction
+
+function! vim_partial_modes#define_action(opts)
+	let l:name = a:opts['name']
+	let l:action = { 'name': l:name, 'maps': {} }
+	if has_key(s:actions, l:name)
+		if !get(a:opts, 'override', v:false)
+			echoerr 'Action ' . l:name . ' already exists'
+		endif
+	endif
+	let l:action['on_expand'] = [] + s:dict_get_list(a:opts, 'on_expand')
+	let l:map_infix  = get(a:opts, 'map_infix', '')
+	let s:actions[l:name] = l:action
+	let l:token = s:construct_plug_token(['partial-modes', 'expand-action', l:name])
+	call s:map_all_modes(l:token, 'vim_partial_modes#action_expand({"name": ' . s:qarg(l:name) . '})', { 'infix': l:map_infix, 'arguments': ['expr'] })
+	return l:token
+endfunction
+
+function! vim_partial_modes#manage_key(opts)
+	let l:key = a:opts['key']
+	let l:action_name = 'key=' . l:key
+	if !has_key(s:actions, l:action_name)
+		let l:token_key = vim_partial_modes#define_action({
+					\ 'name': l:action_name,
+					\ })
+		let l:token_norekey = vim_partial_modes#define_action({
+					\ 'name': 'nore' . l:action_name,
+					\ 'map_infix': 'nore',
+					\ })
+		call vim_partial_modes#action_map({
+					\ 'name': l:action_name,
+					\ 'rhs': l:token_norekey,
+					\ 'priority': 'default',
+					\ })
+		call vim_partial_modes#action_map({
+					\ 'name': 'nore' . l:action_name,
+					\ 'rhs': l:key,
+					\ 'priority': 'synonym',
+					\ })
+	endif
+	let l:token_key = s:construct_plug_token(['partial-modes', 'expand-action', l:action_name])
+	let l:controller = { 'key': l:key, 'action_name': l:action_name }
+	function controller.enable_for_buffer() closure
+		call s:map_all_modes(l:key, l:token_key, { 'arguments': ['buffer'] })
+	endfunction
+	function controller.disable_for_buffer() closure
+		call s:map_all_modes(l:key, '', { 'infix': 'un', 'arguments': ['buffer'] })
+	endfunction
+	function controller.enable_global() closure
+		call s:map_all_modes(l:key, l:token_key)
+	endfunction
+	function controller.disable_global() closure
+		call s:map_all_modes(l:key, '', { 'infix': 'un' })
+	endfunction
+	return l:controller
+endfunction
+
+function! vim_partial_modes#action_map(opts)
+	let l:name = a:opts['name']
+	let l:rhs = a:opts['rhs']
+	let l:action = s:actions[l:name]
+	let l:priority = get(a:opts, 'priority', 'standard')
+	let l:conditions = s:dict_get_list(a:opts, 'conditions')
+	let l:queue = get(l:action['maps'], l:priority, [])
+	call insert(l:queue, { 'conditions': l:conditions, 'rhs': l:rhs })
+	let l:action['maps'][l:priority] = l:queue
+	return ''
+endfunction
+
+function! vim_partial_modes#action_expand(opts)
+	let l:name = a:opts['name']
+	let l:action = s:actions[l:name]
+	let l:maps = l:action['maps']
+	let l:priorities = sort(keys(l:maps), funcref('s:priority_compare'))
+	for l:p in l:priorities
+		for l:m in l:maps[l:p]
+			if vim_partial_modes#condition_has_all(l:m['conditions'])
+				return l:m['rhs']
+			endif
+		endfor
+	endfor
 	return ''
 endfunction
 
