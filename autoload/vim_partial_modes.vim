@@ -27,8 +27,12 @@ endfunction
 
 function! s:apply_funcref(f, args)
 	let s:dict = { 'f': a:f }
-	execute 'let l:res = s:dict.f(' . join(map(range(len(a:args)), {x -> 'a:args[' . x . ']'}), ', ') . ')'
+	execute 'let l:res = s:dict.f(' . join(s:map_array(range(len(a:args)), {x -> 'a:args[' . x . ']'}), ', ') . ')'
 	return l:res
+endfunction
+
+function! s:map_array(arr, func)
+	return map(copy(a:arr), {x -> a:func(a:arr[x])})
 endfunction
 
 function! s:call_all(funcs, ...)
@@ -36,11 +40,11 @@ function! s:call_all(funcs, ...)
 	for l:i in range(len(a:funcs))
 		let l:res[l:i] = s:apply_funcref(a:funcs[l:i], a:000)
 	endfor
-	" return map(a:funcs, {f -> s:apply_funcref(f, a:000)})
+	" return s:map_array(a:funcs, {f -> s:apply_funcref(f, a:000)})
 endfunction
 
 function! s:construct_plug_token(words)
-	return "\<Plug>(" . join(map(a:words, {w -> escape(w, ' )\')}), ' ') . ")"
+	return "\<Plug>(" . join(s:map_array(a:words, {w -> escape(w, ' )\')}), ' ') . ")"
 endfunction
 
 function! s:map_all_modes(lhs, rhs)
@@ -99,7 +103,7 @@ endfunction
 function! vim_partial_modes#define_condition_all(name, names)
 	call vim_partial_modes#define_condition({
 		\ 'name': a:name,
-		\ 'get': {-> index(map(a:names, {_, n -> vim_partial_modes#condition_get(n)}), v:false) == -1}
+		\ 'get': {-> index(s:map_array(a:names, {n -> vim_partial_modes#condition_get(n)}), v:false) == -1}
 		\ })
 	return ''
 endfunction
@@ -107,7 +111,7 @@ endfunction
 function! vim_partial_modes#define_condition_any(name, names)
 	call vim_partial_modes#define_condition({
 		\ 'name': a:name,
-		\ 'get': {-> index(map(a:names, {_, n -> !vim_partial_modes#condition_get(n)}), v:false) != -1}
+		\ 'get': {-> index(s:map_array(a:names, {n -> !vim_partial_modes#condition_get(n)}), v:false) != -1}
 		\ })
 	return ''
 endfunction
