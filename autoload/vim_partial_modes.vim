@@ -153,7 +153,13 @@ function! vim_partial_modes#define_condition_any(name, names)
 	return ''
 endfunction
 
+let s:inside_au = v:false
 function! vim_partial_modes#condition_get(name)
+	if !s:inside_au
+		let s:inside_au = v:true
+		doau User partial_modes_BeforeConditionGet
+		let s:inside_au = v:false
+	endif
 	call s:before_condition_index(a:name)
 	let l:cond = s:conditions[a:name]
 	let l:value = l:cond['get']()
@@ -466,3 +472,94 @@ call vim_partial_modes#define_mode({
 			\ 'name': 'select',
 			\ 'on_enter': vim_partial_modes#condition_setter(['inside-native-mode', 'selection', 'cursor-movement', 'cursorsnap-letters', 'text-input', 'input-inserts'], v:true),
 			\ })
+
+function! s:parse_visual_mode_char(ch)
+	return get({
+		\     'v' : ['visual', 'char'],
+		\     'V' : ['visual', 'line'],
+		\ "\<c-v>": ['visual', 'block'],
+		\     's' : ['select', 'char'],
+		\     'S' : ['select', 'line'],
+		\ "\<c-s>": ['select', 'block'],
+		\ }, a:ch, ['', ''])
+endfunction
+let s:last_native_mode = mode(1)
+function! vim_partial_modes#handle_native_mode_change()
+	let l:mode = mode(1)
+	let l:top_mode = get(s:mode_stack, 0, {'name': s:root_mode})['name']
+	let l:modes = s:map_array(s:mode_stack, {x -> x['name']})
+	if l:mode == s:last_native_mode
+		return ''
+	endif
+	if l:mode[0] == 'n'
+		if l:mode[1] == 'o'
+			let l:force_type = index(['char', 'line', 'block', ''], s:parse_visual_mode_char(l:mode[2])[1])
+			let l:type_states = [v:false, v:false, v:false, v:null]
+			let l:type_states[l:force_type] = v:true
+			call vim_partial_modes#condition_set('operator-force=char', l:type_states[0])
+			call vim_partial_modes#condition_set('operator-force=line', l:type_states[1])
+			call vim_partial_modes#condition_set('operator-force=block', l:type_states[2])
+			if index(l:modes, 'operator') == -1
+				call vim_partial_modes#mode_push({ 'name': 'operator' })
+			else
+				while s:mode_stack[0]['name'] != 'operator'
+					call vim_partial_modes#mode_pop()
+				endwhile
+			endif
+		else
+			if l:mode[1] == 'i'
+				if index(l:modes, 'normal', 1)[:-2] == -1
+					call vim_partial_modes#mode_push({ 'name': 'normal' })
+				else
+					while s:mode_stack[0]['name'] != 'normal'
+						call vim_partial_modes#mode_pop()
+					endwhile
+				endif
+			endif
+			while len(s:mode_stack) > 1 && s:mode_stack[0]['name'] != 'normal'
+				call vim_partial_modes#mode_pop()
+			endwhile
+			if len(s:mode_stack) == 0
+				call vim_partial_modes#mode_push({ 'name': 'normal' })
+			elseif s:mode_stack[0]['name'] != 'normal'
+				call vim_partial_modes#mode_transform({ 'name': 'normal' })
+				" FIXME do not contantly accumulate transformations
+			endif
+		endif
+	else
+		let l:visual_pair = s:parse_visual_mode_char(l:mode[0])
+		let l:name = l:visual_pair[0]
+		if l:name != ''
+			let l:visual_type = index(['char', 'line', 'block'], l:visual_pair[1])
+			let l:type_states = [v:false, v:false, v:false]
+			let l:type_states[l:visual_type] = v:true
+			call vim_partial_modes#condition_set('visual-type=char', l:type_states[0])
+			call vim_partial_modes#condition_set('visual-type=line', l:type_states[1])
+			call vim_partial_modes#condition_set('visual-type=block', l:type_states[2])
+		else
+			let l:name = get({
+				\ 'i': 'insert',
+				\ 'R': 'replace',
+				\ 't': 'terminal',
+				\}, l:mode[0], '')
+		endif
+		if l:name != ''
+			while len(s:mode_stack) > 1 && index(['normal', 'visual', 'select', 'insert', 'replace', 'terminal'], s:mode_stack[0]['name']) == -1
+				call vim_partial_modes#mode_pop()
+			endwhile
+			call vim_partial_modes#mode_transform({ 'name': l:name })
+		elseif l:mode[0] == 'c'
+			call vim_partial_modes#mode_push({ 'name': 'command' })
+		else
+			return ''
+		endif
+	endif
+	let s:last_native_mode = l:mode
+endfunction
+
+aug partial_modes
+	au!
+	au User partial_modes_BeforeConditionGet if vim_partial_modes#condition_get('track-native-mode') | call vim_partial_modes#handle_native_mode_change() | endif
+aug END
+
+call vim_partial_modes#handle_native_mode_change()
